@@ -1966,6 +1966,12 @@ const app = {
     // Window Print setup for A4 fit
     window.addEventListener('beforeprint', () => {
       const printSlip = document.getElementById('printSlipContainer');
+
+      // CRITICAL: Retain stock report or kitchen slip inside printSlipContainer! Do not clear innerHTML!
+      if (document.body.classList.contains('print-stock-report') || document.body.classList.contains('print-slip')) {
+        return;
+      }
+
       if (this.currentTab === 'formb' || document.body.classList.contains('print-formb')) {
         if (printSlip) printSlip.innerHTML = '';
         document.body.classList.remove('print-landscape', 'print-monthly', 'print-yearly', 'print-register', 'print-slip', 'print-taste', 'printing-taste');
@@ -1982,8 +1988,6 @@ const app = {
         if (printSlip) printSlip.innerHTML = '';
         document.body.classList.remove('print-portrait', 'print-formb', 'print-monthly', 'print-register', 'print-slip', 'print-taste', 'printing-taste');
         document.body.classList.add('print-yearly', 'print-landscape');
-      } else if (document.body.classList.contains('print-slip')) {
-        // Handled specifically by printDailySlip
       } else {
         if (printSlip) printSlip.innerHTML = '';
         document.body.classList.remove('print-portrait', 'print-formb', 'print-slip', 'print-taste', 'printing-taste');
@@ -1992,7 +1996,18 @@ const app = {
     });
 
     window.addEventListener('afterprint', () => {
-      document.body.classList.remove('print-formb', 'print-taste', 'printing-taste', 'print-portrait', 'print-landscape', 'print-monthly', 'print-yearly', 'print-register', 'print-slip');
+      document.body.classList.remove(
+        'print-stock-report',
+        'print-formb',
+        'print-taste',
+        'printing-taste',
+        'print-portrait',
+        'print-landscape',
+        'print-monthly',
+        'print-yearly',
+        'print-register',
+        'print-slip'
+      );
       const printSlip = document.getElementById('printSlipContainer');
       if (printSlip) printSlip.innerHTML = '';
     });
@@ -5658,16 +5673,24 @@ const app = {
     printContainer.innerHTML = htmlContent;
     this.setPrintPageOrientation(orientation, 'A4', orientation === 'landscape' ? '4mm 4mm 4mm 4mm' : '6mm 7mm 6mm 7mm');
 
-    document.body.classList.remove('print-landscape', 'print-monthly', 'print-yearly', 'print-register', 'print-legal', 'print-slip', 'print-formb', 'print-taste');
+    document.body.classList.remove('print-landscape', 'print-monthly', 'print-yearly', 'print-register', 'print-legal', 'print-slip', 'print-formb', 'print-taste', 'printing-taste');
     document.body.classList.add('print-stock-report', orientation === 'landscape' ? 'print-landscape' : 'print-portrait');
 
-    window.onafterprint = () => {
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
       document.body.classList.remove('print-stock-report', 'print-landscape', 'print-portrait');
       if (printContainer) printContainer.innerHTML = '';
+      window.removeEventListener('afterprint', cleanup);
     };
+
+    window.addEventListener('afterprint', cleanup, { once: true });
 
     setTimeout(() => {
       window.print();
+      // Fallback cleanup in case afterprint does not fire in mobile or embedded browser
+      setTimeout(cleanup, 2000);
     }, 150);
   },
 
@@ -5713,11 +5736,120 @@ const app = {
   },
 
   /**
+   * Open Stock Report in a Clean New Browser Window / Tab (100% reliable for Mobile PDF save & Print)
+   */
+  openStockReportInNewWindow() {
+    const mode = document.getElementById('stockPrintPeriodMode')?.value || 'live';
+    const monthKey = mode === 'month' ? document.getElementById('stockPrintMonthPicker')?.value : null;
+
+    let content = '';
+    let orientation = 'landscape';
+    let reportTitle = 'शिल्लक साठा पत्रक';
+
+    if (this.currentStockPrintType === 'shillak') {
+      content = this.generateStockBalanceHtml(monthKey);
+      orientation = 'landscape';
+      reportTitle = 'शिल्लक धान्य साठा पत्रक (A4 Landscape)';
+    } else if (this.currentStockPrintType === 'aalele') {
+      content = this.generateStockReceiptsHtml(monthKey);
+      orientation = 'portrait';
+      reportTitle = 'आलेले धान्य आवक नोंदवही (A4 Portrait)';
+    } else if (this.currentStockPrintType === 'kharab') {
+      content = this.generateDamagedStockHtml(monthKey);
+      orientation = 'portrait';
+      reportTitle = 'खराब धान्य नोंद व पंचनामा अहवाल (A4 Portrait)';
+    } else if (this.currentStockPrintType === 'all') {
+      content = `
+        <div class="stock-printable-sheet page-break">${this.generateStockBalanceHtml(monthKey)}</div>
+        <div class="stock-printable-sheet page-break">${this.generateStockReceiptsHtml(monthKey)}</div>
+        <div class="stock-printable-sheet">${this.generateDamagedStockHtml(monthKey)}</div>
+      `;
+      orientation = 'landscape';
+      reportTitle = 'तिन्ही साठा अहवाल संच (Combined Dossier)';
+    }
+
+    const margin = (orientation === 'landscape') ? '4mm 4mm 4mm 4mm' : '6mm 7mm 6mm 7mm';
+    const newWin = window.open('', '_blank');
+    if (!newWin) {
+      this.showToast('कृपया ब्राऊझर पॉप-अपला परवानगी द्या (Allow Pop-up).', 'warning');
+      return;
+    }
+
+    newWin.document.open();
+    newWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="mr">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${reportTitle} - ${this.data.settings.schoolName || 'शालेय पोषण आहार'}</title>
+        <link rel="stylesheet" href="styles.css">
+        <style>
+          @page { size: A4 ${orientation} !important; margin: ${margin} !important; }
+          body { background: #ffffff !important; color: #000000 !important; margin: 0; padding: 12px; font-family: 'Segoe UI', Arial, sans-serif; }
+          .screen-action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 10px 16px;
+            margin-bottom: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          }
+          .screen-action-bar button {
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 14px;
+            border: none;
+          }
+          .btn-print-now {
+            background: #16a34a;
+            color: #ffffff;
+          }
+          .btn-close-win {
+            background: #475569;
+            color: #ffffff;
+          }
+          @media print {
+            .screen-action-bar { display: none !important; }
+            body { padding: 0 !important; margin: 0 !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="screen-action-bar">
+          <div>
+            <strong>🖨️ ${reportTitle}</strong> | ${this.data.settings.schoolName || 'MDM App'}
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-print-now" onclick="window.print()">🖨️ A4 प्रिंट काढा / PDF सेव्ह करा</button>
+            <button class="btn-close-win" onclick="window.close()">❌ बंद करा</button>
+          </div>
+        </div>
+        ${content}
+      </body>
+      </html>
+    `);
+    newWin.document.close();
+  },
+
+  /**
    * Modal Stock Print Center controls
    */
   currentStockPrintType: 'shillak',
 
   openStockPrintModal(defaultType = 'shillak') {
+    // Immediately dismiss mobile drawer if open
+    const drawer = document.getElementById('mobileMoreDrawer');
+    if (drawer) {
+      drawer.classList.remove('open');
+      drawer.style.display = 'none';
+    }
+
     const modal = document.getElementById('stockPrintModal');
     const monthPicker = document.getElementById('stockPrintMonthPicker');
     if (!modal) return;
@@ -5728,6 +5860,7 @@ const app = {
 
     this.setStockPrintType(defaultType);
     modal.style.display = 'flex';
+    modal.style.zIndex = '100005';
   },
 
   closeStockPrintModal() {
@@ -6696,6 +6829,9 @@ const app = {
   }
 
 };
+
+// Explicitly bind app to window for universal access across browsers, iframes and inline handlers
+window.app = app;
 
 // Initialize Application when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

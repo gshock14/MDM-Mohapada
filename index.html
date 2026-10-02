@@ -2191,7 +2191,7 @@
     </div>
 
     <!-- Modal: Stock Reports Print Center (साठा अहवाल प्रिंट केंद्र) -->
-    <div id="stockPrintModal" class="modal-backdrop" style="display: none;">
+    <div id="stockPrintModal" class="modal-backdrop" style="display: none; z-index: 100005;">
       <div class="modal-dialog" style="max-width: 940px; width: 95vw;">
         <div class="modal-content" style="border-top: 4px solid #16a34a;">
           <div class="modal-header" style="background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);">
@@ -2253,13 +2253,18 @@
               <!-- Rendered dynamically via JS -->
             </div>
 
-            <div class="modal-footer mt-3 d-flex justify-content-between align-items-center">
+            <div class="modal-footer mt-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
               <button type="button" class="btn btn-outline-secondary" onclick="app.closeStockPrintModal()">
                 <span>❌ बंद करा</span>
               </button>
-              <button type="button" class="btn btn-success btn-lg px-4" style="font-weight: 800; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);" onclick="app.printCurrentModalStockReport()">
-                <span>🖨️ थेट A4 प्रिंट काढा (Print Now)</span>
-              </button>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary" onclick="app.openStockReportInNewWindow()" title="नवीन विंडोमध्ये अहवाल उघडा किंवा PDF सेव्ह करा" style="font-weight: 700;">
+                  <span>📄 नवीन विंडोमध्ये पहा / सेव्ह करा</span>
+                </button>
+                <button type="button" class="btn btn-success px-4" style="font-weight: 800; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);" onclick="app.printCurrentModalStockReport()">
+                  <span>🖨️ थेट A4 प्रिंट काढा (Print Now)</span>
+                </button>
+              </div>
             </div>
 
           </div>
@@ -2423,9 +2428,6 @@
           </div>
         </div>
       </div>
-    </div>
-    <div id="printSlipContainer" class="print-only-slip"></div>
-
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
 
@@ -2533,6 +2535,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Dedicated Print Container (Direct child of body to guarantee clean print rendering) -->
+  <div id="printSlipContainer" class="print-only-slip"></div>
 
   <!-- Application Logic Scripts -->
   <script src="cloud-sync.js"></script>
